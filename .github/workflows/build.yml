@@ -1,0 +1,89 @@
+name: Build smp-wind
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - test
+  pull_request:
+    branches:
+      - main
+      - master
+      - test
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.preset }}
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        preset:
+          - vs2022-windows-nocuda
+          - vs2022-windows-nocuda-avx
+          - vs2022-windows-nocuda-avx2
+          - vs2022-windows-nocuda-avx512
+
+    env:
+      VCPKG_ROOT: C:\vcpkg
+      VCPKG_BINARY_SOURCES: "clear;x-gha,read,write"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup vcpkg binary cache
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}\archives
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json', 'cmake/ports/**') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      - name: Configure CMake
+        run: |
+          cmake --preset ${{ matrix.preset }} `
+            -DCOPY_OUTPUT=OFF
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Create mod archive
+        shell: pwsh
+        run: |
+          $archiveName = "${{ matrix.preset }}"
+          $stagingDir = "mod-staging"
+          $pluginsDir = "$stagingDir/SKSE/Plugins"
+
+          # Create directory structure
+          New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
+
+          # Copy DLL and PDB
+          Copy-Item "build/src/Release/smpwind.dll" -Destination "$pluginsDir/"
+          Copy-Item "build/src/Release/smpwind.pdb" -Destination "$pluginsDir/"
+
+          # Create zip archive
+          Compress-Archive -Path "$stagingDir/*" `
+            -DestinationPath "smpwind-$archiveName.zip" -Force
+
+          Write-Output "Created mod archive: smpwind-$archiveName.zip"
+
+      - name: Upload mod artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smpwind-mods
+          path: smpwind-*.zip
+          if-no-files-found: warn
