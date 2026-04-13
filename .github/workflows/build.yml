@@ -56,6 +56,7 @@ jobs:
       - name: Configure CMake
         run: |
           cmake --preset ${{ matrix.preset }} `
+            -DCompiledPluginsPath="${{ github.workspace }}/output" `
             -DCOPY_OUTPUT=OFF
 
       - name: Build
