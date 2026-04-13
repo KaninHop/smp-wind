@@ -6,6 +6,8 @@ on:
       - main
       - master
       - test
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -87,3 +89,26 @@ jobs:
           name: smpwind-mods
           path: smpwind-*.zip
           if-no-files-found: warn
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: smpwind-mods
+          path: release-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
