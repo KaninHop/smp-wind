@@ -87,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: smpwind-mods
+          name: smpwind-mods-${{ matrix.preset }}
           path: smpwind-*.zip
           if-no-files-found: warn
 
@@ -101,8 +101,9 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: smpwind-mods
+          pattern: smpwind-mods-*
           path: release-artifacts
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
