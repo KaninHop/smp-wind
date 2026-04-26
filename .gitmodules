@@ -2,3 +2,6 @@
 	path = extern/CommonLibSSE
 	url = https://github.com/alandtse/CommonLibVR
 	branch = ng
+[submodule "papyrus/Dependencies/SkyUI-Community"]
+	path = papyrus/Dependencies/SkyUI-Community
+	url = https://github.com/doodlum/SkyUI-Community.git

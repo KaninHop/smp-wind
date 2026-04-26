@@ -15,6 +15,9 @@ on:
       - test
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build ${{ matrix.preset }}
@@ -91,19 +94,81 @@ jobs:
           path: smpwind-*.zip
           if-no-files-found: warn
 
+  build-mcm:
+    name: Build MCM
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup CI Dependencies
+        shell: powershell
+        run: ./dev-scripts/setup_ci.ps1
+
+      - name: Compile Papyrus scripts
+        shell: pwsh
+        run: |
+          $flagsFile  = Resolve-Path "papyrus/Dependencies/Stubs/BaseGame/TESV_Papyrus_Flags.flg"
+          $imports = @(
+            (Resolve-Path "papyrus"),
+            (Resolve-Path "papyrus/Dependencies/SkyUI-Community/source/scripts"),
+            (Resolve-Path "papyrus/Dependencies/Stubs/BaseGame"),
+            (Resolve-Path "papyrus/Dependencies/Stubs/SKSE")
+          ) -join ";"
+          New-Item -ItemType Directory -Path "papyrus/Scripts" -Force | Out-Null
+          Remove-Item "papyrus/Scripts/*.pex" -ErrorAction SilentlyContinue
+          $output = Resolve-Path "papyrus/Scripts"
+
+          $script = Resolve-Path "papyrus/JGWD_MCM.psc"
+          & ./ci_tools/Caprica.exe --game skyrim --flags "$flagsFile" --import "$imports" --output "$output" --ignorecwd "$script"
+          if ($LASTEXITCODE -ne 0) { throw "JGWD_MCM.psc compilation failed" }
+
+          Write-Host "Scripts compiled:"
+          Get-ChildItem "papyrus/Scripts/*.pex" | ForEach-Object { Write-Host "  $($_.Name) - $($_.Length) bytes" }
+
+      - name: Package MCM archive
+        shell: pwsh
+        run: |
+          $stagingDir = "mcm-staging"
+          New-Item -ItemType Directory -Path "$stagingDir/Scripts" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$stagingDir/Interface/Translations" -Force | Out-Null
+
+          Copy-Item "papyrus/SMP Wind MCM.esp" "$stagingDir/"
+          Copy-Item "papyrus/Scripts/JGWD_MCM.pex" "$stagingDir/Scripts/"
+          Copy-Item "papyrus/SMP Wind MCM_ENGLISH.txt" "$stagingDir/Interface/Translations/"
+
+          Compress-Archive -Path "$stagingDir/*" -DestinationPath "smpwind-mcm.zip" -Force
+          Write-Host "Created MCM archive: smpwind-mcm.zip"
+
+      - name: Upload MCM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smpwind-mcm
+          path: smpwind-mcm.zip
+          if-no-files-found: error
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, build-mcm]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download all artifacts
+      - name: Download DLL artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: smpwind-mods-*
           path: release-artifacts
           merge-multiple: true
+
+      - name: Download MCM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: smpwind-mcm
+          path: release-artifacts
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
